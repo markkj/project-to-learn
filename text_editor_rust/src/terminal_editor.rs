@@ -1,5 +1,5 @@
+use crossterm::event::{read, Event::Key, KeyCode::Char};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
-use std::io::{self, Read};
 
 pub struct TerminalEditor {}
 
@@ -10,33 +10,43 @@ impl TerminalEditor {
     }
 
     pub fn run(&self) {
-        // unwrap is is method is used to extract the value inside and `Option` or `Result` type
-        // and we confident that the operation will succeed
-        // and do not want to explicitly handle errors or None
-        enable_raw_mode().unwrap();
-        for b in io::stdin().bytes() {
-            // match is handle Result
-            match b {
-                Ok(b) => {
-                    let c = b as char;
-                    // is_control is function that if input is the general category for control codes.
-                    // example ctrl, tab, alt, etc.
-                    if c.is_control() {
-                        // 08b => # is add preix (such as 0bxxx), 0 is padding, 8 is maximum output, b is binary
-                        println!("Binary: {0:#08b} ASCII: {0:03} \r", b);
-                    } else {
-                        println!("Binary: {0:08b} ASCII: {0:03} Charactre: {1:?} \r", b, c);
-                    }
-                    if c == 'q' {
-                        println!("exit program");
-                        break;
+        Self::init().unwrap();
+        self.repl();
+        Self::cleanup().unwrap();
+    }
+
+    fn init() -> Result<(), std::io::Error> {
+        Self::clear_screen();
+        print!("Type q to quit.\r\n");
+        return enable_raw_mode();
+    }
+
+    fn cleanup() -> Result<(), std::io::Error> {
+        Self::clear_screen();
+        return disable_raw_mode();
+    }
+
+    fn clear_screen() {
+        println!("\x1b[2J");
+    }
+
+    // repl => Read Eval Print Loop
+    fn repl(&self) {
+        loop {
+            match read() {
+                Ok(Key(event)) => {
+                    println!("{event:?} \r");
+                    if let Char(c) = event.code {
+                        if c == 'q' {
+                            break;
+                        }
                     }
                 }
                 Err(err) => {
-                    println!("Error: {}", err)
-                }
+                    println!("Error: {err}");
+                } // handle other key event that not exist in KeyEvent
+                _ => {}
             }
         }
-        disable_raw_mode().unwrap();
     }
 }
