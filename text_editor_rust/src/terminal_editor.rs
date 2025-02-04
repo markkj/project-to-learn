@@ -1,17 +1,20 @@
 use crossterm::event::{read, Event::Key, KeyCode::Char};
+use crossterm::event::{Event, KeyEvent};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 
-pub struct TerminalEditor {}
+pub struct TerminalEditor {
+    is_quit: bool,
+}
 
 impl TerminalEditor {
     // the Default trait to provide default values.
     pub fn default() -> Self {
-        TerminalEditor {}
+        TerminalEditor { is_quit: false }
     }
 
-    pub fn run(&self) {
+    pub fn run(&mut self) {
         Self::init().unwrap();
-        self.repl();
+        self.repl().unwrap();
         Self::cleanup().unwrap();
     }
 
@@ -30,22 +33,32 @@ impl TerminalEditor {
         println!("\x1b[2J");
     }
 
+    fn refresh(&self) {
+        if self.is_quit {
+            Self::clear_screen();
+        }
+    }
+
     // repl => Read Eval Print Loop
-    fn repl(&self) {
+    fn repl(&mut self) -> Result<(), std::io::Error> {
         loop {
-            match read() {
-                Ok(Key(event)) => {
-                    println!("{event:?} \r");
-                    if let Char(c) = event.code {
-                        if c == 'q' {
-                            break;
-                        }
-                    }
+            let event = read()?;
+            self.evaluate(&event);
+            self.refresh();
+            if self.is_quit {
+                break;
+            }
+        }
+        Ok(())
+    }
+
+    fn evaluate(&mut self, event: &Event) {
+        if let Key(KeyEvent { code, .. }) = event {
+            match code {
+                Char('q') => {
+                    self.is_quit = true;
                 }
-                Err(err) => {
-                    println!("Error: {err}");
-                } // handle other key event that not exist in KeyEvent
-                _ => {}
+                _ => (),
             }
         }
     }
