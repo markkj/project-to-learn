@@ -70,16 +70,16 @@ impl TerminalEditor {
                 Char('q') => {
                     self.is_quit = true;
                 }
-                KeyCode::Left => {
+                KeyCode::Left | Char('a') => {
                     self.cursor_x_position = self.cursor_x_position.saturating_sub(1);
                 }
-                KeyCode::Right => {
+                KeyCode::Right | Char('d') => {
                     self.cursor_x_position = self.cursor_x_position.saturating_add(1);
                 }
-                KeyCode::Up => {
+                KeyCode::Up | Char('w') => {
                     self.cursor_y_position = self.cursor_y_position.saturating_sub(1);
                 }
-                KeyCode::Down => {
+                KeyCode::Down | Char('s') => {
                     self.cursor_y_position = self.cursor_y_position.saturating_add(1);
                 }
                 _ => (),

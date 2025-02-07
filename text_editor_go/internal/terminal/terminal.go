@@ -21,7 +21,9 @@ type Terminal struct {
 	       Ospeed    uint64
 	   }
 	*/
-	oldState syscall.Termios
+	oldState        syscall.Termios
+	cursorXPosition int64
+	cursorYPosition int64
 }
 
 func (t *Terminal) enableRawMode() {
@@ -99,16 +101,49 @@ func (t *Terminal) disableRawMode() {
 	}
 }
 
-func (t *Terminal) relp() {
+// moveCursor uses ANSI escape codes to position the cursor.
+// (x,y) here are 0-indexed, so we add 1 for the ANSI code.
+func (t *Terminal) moveCursor() {
+	fmt.Printf("\x1b[%d;%dH", t.cursorYPosition, t.cursorXPosition)
+	os.Stdout.Sync()
+}
+
+func (t *Terminal) clearScreen() {
+	fmt.Print("\x1b[2J")
+	os.Stdout.Sync()
+}
+
+func (t *Terminal) relp() error {
 	for {
-		var bufKeyPress [1]byte
-		os.Stdin.Read(bufKeyPress[:])
-		switch bufKeyPress[0] {
-		case 'q':
-			return
-		default:
-			fmt.Println(bufKeyPress[0])
+		keyEvent, err := ParseKeyEvent()
+		if err != nil {
+			return err
 		}
+
+		switch keyEvent.KeyCode {
+		case KeyChar:
+			switch {
+			case keyEvent.Char == 'q':
+				return nil
+			case keyEvent.Char == 'a':
+				t.cursorXPosition = max(t.cursorXPosition-1, 1)
+			case keyEvent.Char == 'd':
+				t.cursorXPosition += 1
+			case keyEvent.Char == 'w':
+				t.cursorYPosition = max(t.cursorYPosition-1, 1)
+			case keyEvent.Char == 's':
+				t.cursorYPosition += 1
+			}
+		case KeyArrowLeft:
+			t.cursorXPosition = max(t.cursorXPosition-1, 1)
+		case KeyArrowRight:
+			t.cursorXPosition += 1
+		case KeyArrowUp:
+			t.cursorYPosition = max(t.cursorYPosition-1, 1)
+		case KeyArrowDown:
+			t.cursorYPosition += 1
+		}
+		t.moveCursor()
 	}
 }
 
@@ -116,5 +151,8 @@ func (t *Terminal) Run() {
 	t.enableRawMode()
 	defer t.disableRawMode()
 
-	t.relp()
+	t.clearScreen()
+	if err := t.relp(); err != nil {
+		panic(err)
+	}
 }
