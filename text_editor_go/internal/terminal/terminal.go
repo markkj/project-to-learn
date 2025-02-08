@@ -24,6 +24,14 @@ type Terminal struct {
 	oldState        syscall.Termios
 	cursorXPosition int64
 	cursorYPosition int64
+	isQuit          bool
+}
+
+func NewTerminal() *Terminal {
+	return &Terminal{
+		cursorXPosition: 1,
+		cursorYPosition: 1,
+	}
 }
 
 func (t *Terminal) enableRawMode() {
@@ -103,7 +111,13 @@ func (t *Terminal) disableRawMode() {
 
 // moveCursor uses ANSI escape codes to position the cursor.
 // (x,y) here are 0-indexed, so we add 1 for the ANSI code.
-func (t *Terminal) moveCursor() {
+func (t *Terminal) moveCursor(x, y int64) {
+	t.cursorXPosition = max(t.cursorXPosition+x, 1)
+	t.cursorYPosition = max(t.cursorYPosition+y, 1)
+	os.Stdout.Sync()
+}
+
+func (t *Terminal) refreshScreen() {
 	fmt.Printf("\x1b[%d;%dH", t.cursorYPosition, t.cursorXPosition)
 	os.Stdout.Sync()
 }
@@ -115,36 +129,46 @@ func (t *Terminal) clearScreen() {
 
 func (t *Terminal) relp() error {
 	for {
-		keyEvent, err := ParseKeyEvent()
-		if err != nil {
+		t.refreshScreen()
+		if err := t.eval(); err != nil {
 			return err
 		}
-
-		switch keyEvent.KeyCode {
-		case KeyChar:
-			switch {
-			case keyEvent.Char == 'q':
-				return nil
-			case keyEvent.Char == 'a':
-				t.cursorXPosition = max(t.cursorXPosition-1, 1)
-			case keyEvent.Char == 'd':
-				t.cursorXPosition += 1
-			case keyEvent.Char == 'w':
-				t.cursorYPosition = max(t.cursorYPosition-1, 1)
-			case keyEvent.Char == 's':
-				t.cursorYPosition += 1
-			}
-		case KeyArrowLeft:
-			t.cursorXPosition = max(t.cursorXPosition-1, 1)
-		case KeyArrowRight:
-			t.cursorXPosition += 1
-		case KeyArrowUp:
-			t.cursorYPosition = max(t.cursorYPosition-1, 1)
-		case KeyArrowDown:
-			t.cursorYPosition += 1
+		if t.isQuit {
+			return nil
 		}
-		t.moveCursor()
 	}
+}
+
+func (t *Terminal) eval() error {
+	keyEvent, err := ParseKeyEvent()
+	if err != nil {
+		return err
+	}
+
+	switch keyEvent.KeyCode {
+	case KeyChar:
+		switch {
+		case keyEvent.Char == 'q':
+			t.isQuit = true
+		case keyEvent.Char == 'h':
+			t.moveCursor(-1, 0)
+		case keyEvent.Char == 'l':
+			t.moveCursor(1, 0)
+		case keyEvent.Char == 'k':
+			t.moveCursor(0, -1)
+		case keyEvent.Char == 'j':
+			t.moveCursor(0, 1)
+		}
+	case KeyArrowLeft:
+		t.moveCursor(-1, 0)
+	case KeyArrowRight:
+		t.moveCursor(1, 0)
+	case KeyArrowUp:
+		t.moveCursor(0, -1)
+	case KeyArrowDown:
+		t.moveCursor(0, 1)
+	}
+	return nil
 }
 
 func (t *Terminal) Run() {

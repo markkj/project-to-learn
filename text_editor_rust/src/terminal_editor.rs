@@ -54,9 +54,9 @@ impl TerminalEditor {
     // repl => Read Eval Print Loop
     fn repl(&mut self) -> Result<(), std::io::Error> {
         loop {
+            self.refresh()?;
             let event = read()?;
             self.evaluate(&event);
-            self.refresh()?;
             if self.is_quit {
                 break;
             }
@@ -70,16 +70,16 @@ impl TerminalEditor {
                 Char('q') => {
                     self.is_quit = true;
                 }
-                KeyCode::Left | Char('a') => {
+                KeyCode::Left | Char('h') => {
                     self.cursor_x_position = self.cursor_x_position.saturating_sub(1);
                 }
-                KeyCode::Right | Char('d') => {
+                KeyCode::Right | Char('l') => {
                     self.cursor_x_position = self.cursor_x_position.saturating_add(1);
                 }
-                KeyCode::Up | Char('w') => {
+                KeyCode::Up | Char('k') => {
                     self.cursor_y_position = self.cursor_y_position.saturating_sub(1);
                 }
-                KeyCode::Down | Char('s') => {
+                KeyCode::Down | Char('j') => {
                     self.cursor_y_position = self.cursor_y_position.saturating_add(1);
                 }
                 _ => (),
