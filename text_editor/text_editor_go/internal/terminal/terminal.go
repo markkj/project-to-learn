@@ -25,12 +25,16 @@ type Terminal struct {
 	cursorXPosition int64
 	cursorYPosition int64
 	isQuit          bool
+
+	txtBuff []string
 }
 
 func NewTerminal() *Terminal {
 	return &Terminal{
 		cursorXPosition: 1,
 		cursorYPosition: 1,
+		// precap 1000 elements
+		txtBuff: make([]string, 1, 1000),
 	}
 }
 
@@ -109,22 +113,25 @@ func (t *Terminal) disableRawMode() {
 	}
 }
 
-// moveCursor uses ANSI escape codes to position the cursor.
-// (x,y) here are 0-indexed, so we add 1 for the ANSI code.
-func (t *Terminal) moveCursor(x, y int64) {
-	t.cursorXPosition = max(t.cursorXPosition+x, 1)
-	t.cursorYPosition = max(t.cursorYPosition+y, 1)
-	os.Stdout.Sync()
+func (t *Terminal) printTextBuffer() {
+	for row, line := range t.txtBuff {
+		// Move cursor to the beginning of each line (columns are 1-indexed).
+		fmt.Printf("\x1b[%d;1H%s", row+1, line)
+	}
 }
 
 func (t *Terminal) refreshScreen() {
+	t.clearScreen()
+	t.printTextBuffer()
+	// moveCursor uses ANSI escape codes to position the cursor.
+	// (x,y) here are 0-indexed, so we add 1 for the ANSI code.
 	fmt.Printf("\x1b[%d;%dH", t.cursorYPosition, t.cursorXPosition)
 	os.Stdout.Sync()
 }
 
 func (t *Terminal) clearScreen() {
+	// ANSI escape code to clear screen.
 	fmt.Print("\x1b[2J")
-	os.Stdout.Sync()
 }
 
 func (t *Terminal) relp() error {
@@ -147,26 +154,48 @@ func (t *Terminal) eval() error {
 
 	switch keyEvent.KeyCode {
 	case KeyChar:
-		switch {
-		case keyEvent.Char == 'q':
-			t.isQuit = true
-		case keyEvent.Char == 'h':
-			t.moveCursor(-1, 0)
-		case keyEvent.Char == 'l':
-			t.moveCursor(1, 0)
-		case keyEvent.Char == 'k':
-			t.moveCursor(0, -1)
-		case keyEvent.Char == 'j':
-			t.moveCursor(0, 1)
+		if len(t.txtBuff) < int(t.cursorYPosition) {
+			t.txtBuff = append(t.txtBuff, "")
 		}
+		line := t.txtBuff[t.cursorYPosition-1]
+		t.txtBuff[t.cursorYPosition-1] = line[:t.cursorXPosition-1] + string(keyEvent.Char) + line[t.cursorXPosition-1:]
+		t.cursorXPosition += 1
+	case KeyBackSpace:
+		if t.cursorXPosition-1 >= 1 {
+			line := t.txtBuff[t.cursorYPosition-1]
+			t.txtBuff[t.cursorYPosition-1] = line[:t.cursorXPosition-2] + line[t.cursorXPosition-1:]
+			t.cursorXPosition -= 1
+		}
+	case KeyEnter:
+		t.cursorYPosition += 1
+		if len(t.txtBuff) < int(t.cursorYPosition) {
+			t.txtBuff = append(t.txtBuff, "")
+		}
+		t.cursorXPosition = 1
+	case KeyEsc:
+		t.isQuit = true
 	case KeyArrowLeft:
-		t.moveCursor(-1, 0)
+		if t.cursorXPosition > 1 {
+			t.cursorXPosition -= 1
+		}
 	case KeyArrowRight:
-		t.moveCursor(1, 0)
+		if len(t.txtBuff[t.cursorYPosition-1]) >= int(t.cursorXPosition) {
+			t.cursorXPosition += 1
+		}
 	case KeyArrowUp:
-		t.moveCursor(0, -1)
+		if int(t.cursorYPosition) > 1 {
+			t.cursorYPosition -= 1
+			if int(t.cursorXPosition) > len(t.txtBuff[t.cursorYPosition-1]) {
+				t.cursorXPosition = int64(len(t.txtBuff[t.cursorYPosition-1])) + 1
+			}
+		}
 	case KeyArrowDown:
-		t.moveCursor(0, 1)
+		if len(t.txtBuff) > int(t.cursorYPosition) {
+			t.cursorYPosition += 1
+			if int(t.cursorXPosition) > len(t.txtBuff[t.cursorYPosition-1]) {
+				t.cursorXPosition = int64(len(t.txtBuff[t.cursorYPosition-1])) + 1
+			}
+		}
 	}
 	return nil
 }
@@ -175,7 +204,6 @@ func (t *Terminal) Run() {
 	t.enableRawMode()
 	defer t.disableRawMode()
 
-	t.clearScreen()
 	if err := t.relp(); err != nil {
 		panic(err)
 	}

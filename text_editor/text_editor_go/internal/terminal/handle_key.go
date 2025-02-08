@@ -13,6 +13,10 @@ const (
 	KeyArrowDown
 	KeyArrowLeft
 	KeyArrowRight
+	KeyBackSpace
+	KeyEnter
+	KeyEsc
+	KeyCtrlChar
 	KeyChar // for normal character keys
 )
 
@@ -28,9 +32,23 @@ func ParseKeyEvent() (KeyEvent, error) {
 		return KeyEvent{}, err
 	}
 
+	if bufKeyPress[0] == 27 && bufKeyPress[1] == 0 {
+		return KeyEvent{KeyCode: KeyEsc}, nil
+	}
+
 	// If it's not an escape character, it's likely a normal key.
-	if bufKeyPress[0] != 27 {
-		return KeyEvent{KeyCode: KeyChar, Char: rune(bufKeyPress[0])}, nil
+	if bufKeyPress[0] != 27 && bufKeyPress[1] == 0 {
+		switch bufKeyPress[0] {
+		case 13:
+			return KeyEvent{KeyCode: KeyEnter}, nil
+		case 127:
+			return KeyEvent{KeyCode: KeyBackSpace}, nil
+		default:
+			if bufKeyPress[0] >= 1 && bufKeyPress[0] <= 16 {
+				return KeyEvent{KeyCode: KeyCtrlChar}, nil
+			}
+			return KeyEvent{KeyCode: KeyChar, Char: rune(bufKeyPress[0])}, nil
+		}
 	}
 
 	// Check for arrow keys.
