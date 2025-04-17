@@ -3,13 +3,14 @@ use crossterm::event::{read, Event::Key, KeyCode::Char};
 use crossterm::event::{Event, KeyCode, KeyEvent};
 use crossterm::execute;
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType};
-use std::io::{self};
+use std::io::{self, Write};
 
 pub struct TerminalEditor {
     is_quit: bool,
     stdout: io::Stdout,
     cursor_x_position: u16,
     cursor_y_position: u16,
+    text_buffer: [[char; 500]; 500],
 }
 
 impl TerminalEditor {
@@ -18,8 +19,9 @@ impl TerminalEditor {
         TerminalEditor {
             is_quit: false,
             stdout: io::stdout(),
-            cursor_x_position: 0,
-            cursor_y_position: 0,
+            cursor_x_position: 1,
+            cursor_y_position: 1,
+            text_buffer: [[0 as char; 500]; 500],
         }
     }
 
@@ -44,11 +46,27 @@ impl TerminalEditor {
         return execute!(self.stdout, Clear(ClearType::All));
     }
 
+    fn print_text_buffer(&mut self) -> Result<(), io::Error> {
+        for (i, row) in self.text_buffer.iter().enumerate() {
+            let mut s = String::new();
+            for col in row {
+                s.push(*col);
+            }
+            execute!(self.stdout, MoveTo(1, (i + 1) as u16))?;
+            print!("{}", s)
+        }
+        Ok(())
+    }
+
     fn refresh(&mut self) -> Result<(), io::Error> {
-        return execute!(
+        self.clear_screen()?;
+        self.print_text_buffer()?;
+        execute!(
             self.stdout,
             MoveTo(self.cursor_x_position, self.cursor_y_position)
-        );
+        )?;
+        self.stdout.flush()?;
+        Ok(())
     }
 
     // repl => Read Eval Print Loop
@@ -64,23 +82,53 @@ impl TerminalEditor {
         Ok(())
     }
 
+    fn move_cursor(&mut self, x: u16, y: u16) {
+        if x > 0 {
+            self.cursor_x_position = x
+        }
+
+        if y > 0 {
+            self.cursor_y_position = y
+        }
+    }
+
     fn evaluate(&mut self, event: &Event) {
         if let Key(KeyEvent { code, .. }) = event {
             match code {
-                Char('q') => {
+                Char(c) => {
+                    self.text_buffer[(self.cursor_y_position - 1) as usize]
+                        [(self.cursor_x_position - 1) as usize] = *c;
+                    self.move_cursor(
+                        self.cursor_x_position.saturating_add(1),
+                        self.cursor_y_position,
+                    );
+                }
+                KeyCode::Esc => {
                     self.is_quit = true;
                 }
-                KeyCode::Left | Char('h') => {
-                    self.cursor_x_position = self.cursor_x_position.saturating_sub(1);
+                KeyCode::Left => {
+                    self.move_cursor(
+                        self.cursor_x_position.saturating_sub(1),
+                        self.cursor_y_position,
+                    );
                 }
-                KeyCode::Right | Char('l') => {
-                    self.cursor_x_position = self.cursor_x_position.saturating_add(1);
+                KeyCode::Right => {
+                    self.move_cursor(
+                        self.cursor_x_position.saturating_add(1),
+                        self.cursor_y_position,
+                    );
                 }
-                KeyCode::Up | Char('k') => {
-                    self.cursor_y_position = self.cursor_y_position.saturating_sub(1);
+                KeyCode::Up => {
+                    self.move_cursor(
+                        self.cursor_x_position,
+                        self.cursor_y_position.saturating_sub(1),
+                    );
                 }
-                KeyCode::Down | Char('j') => {
-                    self.cursor_y_position = self.cursor_y_position.saturating_add(1);
+                KeyCode::Down => {
+                    self.move_cursor(
+                        self.cursor_x_position,
+                        self.cursor_y_position.saturating_add(1),
+                    );
                 }
                 _ => (),
             }
