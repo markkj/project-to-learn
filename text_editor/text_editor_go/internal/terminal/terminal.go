@@ -116,6 +116,7 @@ func (t *Terminal) disableRawMode() {
 func (t *Terminal) printTextBuffer() {
 	for row, line := range t.txtBuff {
 		// Move cursor to the beginning of each line (columns are 1-indexed).
+		// Print value to correct cursor position in terminal
 		fmt.Printf("\x1b[%d;1H%s", row+1, line)
 	}
 }
