@@ -11,6 +11,8 @@ pub struct TerminalEditor {
     cursor_x_position: u16,
     cursor_y_position: u16,
     text_buffer: [[char; 500]; 500],
+    max_x_position: [u16; 500],
+    max_line: u16,
 }
 
 impl TerminalEditor {
@@ -22,6 +24,8 @@ impl TerminalEditor {
             cursor_x_position: 1,
             cursor_y_position: 1,
             text_buffer: [[0 as char; 500]; 500],
+            max_x_position: [1 as u16; 500],
+            max_line: 1,
         }
     }
 
@@ -82,14 +86,12 @@ impl TerminalEditor {
         Ok(())
     }
 
-    fn move_cursor(&mut self, x: u16, y: u16) {
-        if x > 0 {
-            self.cursor_x_position = x
-        }
-
-        if y > 0 {
-            self.cursor_y_position = y
-        }
+    fn move_cursor_to(&mut self, x: u16, y: u16) {
+        let y = y.max(1);
+        let x = x.max(1);
+        let row: usize = (y - 1) as usize;
+        self.cursor_x_position = self.max_x_position[row].min(x);
+        self.cursor_y_position = y
     }
 
     fn evaluate(&mut self, event: &Event) {
@@ -98,7 +100,8 @@ impl TerminalEditor {
                 Char(c) => {
                     self.text_buffer[(self.cursor_y_position - 1) as usize]
                         [(self.cursor_x_position - 1) as usize] = *c;
-                    self.move_cursor(
+                    self.max_x_position[(self.cursor_y_position - 1) as usize] += 1;
+                    self.move_cursor_to(
                         self.cursor_x_position.saturating_add(1),
                         self.cursor_y_position,
                     );
@@ -107,25 +110,34 @@ impl TerminalEditor {
                     self.is_quit = true;
                 }
                 KeyCode::Left => {
-                    self.move_cursor(
+                    self.move_cursor_to(
                         self.cursor_x_position.saturating_sub(1),
                         self.cursor_y_position,
                     );
                 }
                 KeyCode::Right => {
-                    self.move_cursor(
+                    self.move_cursor_to(
                         self.cursor_x_position.saturating_add(1),
                         self.cursor_y_position,
                     );
                 }
                 KeyCode::Up => {
-                    self.move_cursor(
+                    self.move_cursor_to(
                         self.cursor_x_position,
                         self.cursor_y_position.saturating_sub(1),
                     );
                 }
                 KeyCode::Down => {
-                    self.move_cursor(
+                    if self.cursor_y_position < self.max_line {
+                        self.move_cursor_to(
+                            self.cursor_x_position,
+                            self.cursor_y_position.saturating_add(1),
+                        );
+                    }
+                }
+                KeyCode::Enter => {
+                    self.max_line += 1;
+                    self.move_cursor_to(
                         self.cursor_x_position,
                         self.cursor_y_position.saturating_add(1),
                     );
