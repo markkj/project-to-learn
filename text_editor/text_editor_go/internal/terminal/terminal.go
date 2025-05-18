@@ -5,6 +5,8 @@ import (
 	"os"
 	"syscall"
 	"unsafe"
+
+	"github.com/markkj/project-to-learn/text_editor/internal/editor"
 )
 
 type Terminal struct {
@@ -21,20 +23,15 @@ type Terminal struct {
 	       Ospeed    uint64
 	   }
 	*/
-	oldState        syscall.Termios
-	cursorXPosition int64
-	cursorYPosition int64
-	isQuit          bool
+	oldState syscall.Termios
+	isQuit   bool
 
-	txtBuff []string
+	editor *editor.Editor
 }
 
 func NewTerminal() *Terminal {
 	return &Terminal{
-		cursorXPosition: 1,
-		cursorYPosition: 1,
-		// precap 1000 elements
-		txtBuff: make([]string, 1, 1000),
+		editor: editor.NewEditor(),
 	}
 }
 
@@ -114,7 +111,7 @@ func (t *Terminal) disableRawMode() {
 }
 
 func (t *Terminal) printTextBuffer() {
-	for row, line := range t.txtBuff {
+	for row, line := range t.editor.GetTextBuffer() {
 		// Move cursor to the beginning of each line (columns are 1-indexed).
 		// Print value to correct cursor position in terminal
 		fmt.Printf("\x1b[%d;1H%s", row+1, line)
@@ -126,7 +123,8 @@ func (t *Terminal) refreshScreen() {
 	t.printTextBuffer()
 	// moveCursor uses ANSI escape codes to position the cursor.
 	// (x,y) here are 0-indexed, so we add 1 for the ANSI code.
-	fmt.Printf("\x1b[%d;%dH", t.cursorYPosition, t.cursorXPosition)
+	x, y := t.editor.GetCurrentPosition()
+	fmt.Printf("\x1b[%d;%dH", y, x)
 	os.Stdout.Sync()
 }
 
@@ -155,48 +153,21 @@ func (t *Terminal) eval() error {
 
 	switch keyEvent.KeyCode {
 	case KeyChar:
-		if len(t.txtBuff) < int(t.cursorYPosition) {
-			t.txtBuff = append(t.txtBuff, "")
-		}
-		line := t.txtBuff[t.cursorYPosition-1]
-		t.txtBuff[t.cursorYPosition-1] = line[:t.cursorXPosition-1] + string(keyEvent.Char) + line[t.cursorXPosition-1:]
-		t.cursorXPosition += 1
+		t.editor.InsertCharacter(keyEvent.Char)
 	case KeyBackSpace:
-		if t.cursorXPosition-1 >= 1 {
-			line := t.txtBuff[t.cursorYPosition-1]
-			t.txtBuff[t.cursorYPosition-1] = line[:t.cursorXPosition-2] + line[t.cursorXPosition-1:]
-			t.cursorXPosition -= 1
-		}
+		t.editor.DeleteCharacter()
 	case KeyEnter:
-		t.cursorYPosition += 1
-		if len(t.txtBuff) < int(t.cursorYPosition) {
-			t.txtBuff = append(t.txtBuff, "")
-		}
-		t.cursorXPosition = 1
+		t.editor.NewLine()
 	case KeyEsc:
 		t.isQuit = true
 	case KeyArrowLeft:
-		if t.cursorXPosition > 1 {
-			t.cursorXPosition -= 1
-		}
+		t.editor.MoveCursorLeft()
 	case KeyArrowRight:
-		if len(t.txtBuff[t.cursorYPosition-1]) >= int(t.cursorXPosition) {
-			t.cursorXPosition += 1
-		}
+		t.editor.MoveCursorRight()
 	case KeyArrowUp:
-		if int(t.cursorYPosition) > 1 {
-			t.cursorYPosition -= 1
-			if int(t.cursorXPosition) > len(t.txtBuff[t.cursorYPosition-1]) {
-				t.cursorXPosition = int64(len(t.txtBuff[t.cursorYPosition-1])) + 1
-			}
-		}
+		t.editor.MoveCursorUp()
 	case KeyArrowDown:
-		if len(t.txtBuff) > int(t.cursorYPosition) {
-			t.cursorYPosition += 1
-			if int(t.cursorXPosition) > len(t.txtBuff[t.cursorYPosition-1]) {
-				t.cursorXPosition = int64(len(t.txtBuff[t.cursorYPosition-1])) + 1
-			}
-		}
+		t.editor.MoveCursorDown()
 	}
 	return nil
 }
