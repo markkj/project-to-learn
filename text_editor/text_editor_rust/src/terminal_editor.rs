@@ -142,6 +142,11 @@ impl TerminalEditor {
                         self.cursor_y_position.saturating_add(1),
                     );
                 }
+                KeyCode::Backspace => {
+                    // no any character in line
+                    // we implement it after got final data structure for store
+                    // but if use char[][] as text buffer it will be hard for delete.
+                }
                 _ => (),
             }
         }
